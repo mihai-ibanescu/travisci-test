@@ -4,13 +4,13 @@ python:
 
 # command to run tests
 script:
-  - # ARGS:
-  - # run soos.py with the -h flag for help
+  -  # ARGS:
+  -  # run soos.py with the -h flag for help
 
-  - # ARGS REQUIRING CUSTOMIZATION:
+  -  # ARGS REQUIRING CUSTOMIZATION:
   - SOOS_PROJECT_NAME="mihai_test_travis_ci"
 
-  - # ARGS WHERE CUSTOMIZATION IS OPTIONAL:
+  -  # ARGS WHERE CUSTOMIZATION IS OPTIONAL:
   - SOOS_MODE="run_and_wait"
   - SOOS_ON_FAILURE="fail_the_build"
   - SOOS_DIRS_TO_EXCLUDE="soos/"
@@ -18,22 +18,22 @@ script:
   - SOOS_ANALYSIS_RESULT_MAX_WAIT=300
   - SOOS_ANALYSIS_RESULT_POLLING_INTERVAL=10
 
-  - # ARGS WHERE CUSTOMIZATION IS OPTIONAL, BUT UNLIKELY:
+  -  # ARGS WHERE CUSTOMIZATION IS OPTIONAL, BUT UNLIKELY:
   - SOOS_API_BASE_URL="https://dev-api.soos.io/api/"
 
-  - # CI ENGINE SPECIFIC:
+  -  # CI ENGINE SPECIFIC:
   - eval SOOS_CHECKOUT_DIR="$TRAVIS_BUILD_DIR"
 
-  - # BUILD/BRANCH SPECIFIC ARGS:
+  -  # BUILD/BRANCH SPECIFIC ARGS:
   - SOOS_COMMIT_HASH="${TRAVIS_COMMIT}"
   - SOOS_BRANCH_NAME="${TRAVIS_BRANCH}"
   - SOOS_BRANCH_URI="${TRAVIS_BUILD_WEB_URL}" # ENTER BRANCH URI HERE IF KNOWN
   - SOOS_BUILD_VERSION="build v1" # ENTER BUILD VERSION HERE IF KNOWN
   - SOOS_BUILD_URI="" # ENTER BUILD URI HERE IF KNOWN
-  - SOOS_OPERATING_ENVIRONMENT="${TRAVIS_OS_NAME}"      # ENTER OPERATING ENVIRONMENT HERE IF KNOWN (default will be provided)
+  - SOOS_OPERATING_ENVIRONMENT="${TRAVIS_OS_NAME}" # ENTER OPERATING ENVIRONMENT HERE IF KNOWN (default will be provided)
   - SOOS_INTEGRATION_NAME="TravisCI"
 
-  - # **************************** Modify Above Only ***************#
+  -  # **************************** Modify Above Only ***************#
   - mkdir -p "${SOOS_CHECKOUT_DIR}/soos/workspace"
   - cd "${SOOS_CHECKOUT_DIR}"
   - python3 -m venv .
