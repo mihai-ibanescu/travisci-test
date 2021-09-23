@@ -1,4 +1,3 @@
-import requests
 import json
 from datetime import datetime
 import sys
@@ -11,7 +10,7 @@ import urllib.parse
 import platform
 
 from pathlib import Path  # User Home Folder references
-
+import requests
 
 class SOOSStructureAPIResponse:
 
@@ -90,12 +89,13 @@ class SOOSStructureAPI:
 
         if soos_context.integration_name is not None:
             structure_api_data["integrationName"] = soos_context.integration_name
-
+        
         for i in range(0, SOOSStructureAPI.API_RETRY_COUNT):
             try:
                 kernel = requests.post(
                         url=api_url,
                         data=json.dumps(structure_api_data),
+                        #files=structure_api_data,
                         headers={'x-soos-apikey': soos_context.api_key, 'Content-Type': 'application/json'})
 
                 if kernel.status_code > 500:
@@ -108,16 +108,14 @@ class SOOSStructureAPI:
                 else:
                     api_response = SOOSStructureAPIResponse(kernel)
 
-                #print("API response is", api_response)
 
                 break
 
-            except:
-                #print("THis is the reponse", api_reponse)
-                SOOS.console_log("Structure API Exception Occurred. "
+            except Exception as e:
+                SOOS.console_log("A Structure API Exception Occurred. "
                       "Attempt " + str(i + 1) + " of " + str(SOOSStructureAPI.API_RETRY_COUNT) + "::" +
                       "Data: " + str(structure_api_data) + "::" +
-                      "Exception: " + str("egg")
+                      "Exception: " + str(e)
                 )
 
         return api_response
@@ -351,7 +349,7 @@ class SOOSManifestAPI:
         api_url = api_url.replace("{soos_analysis_id}", analysis_id)
         api_url = api_url.replace("{soos_manifest_name}", manifest_name_for_url)
         api_url = api_url.replace("{soos_manifest_label}", manifest_label_for_url)
-
+        
         return api_url
 
     @staticmethod
@@ -370,11 +368,13 @@ class SOOSManifestAPI:
         for i in range(0, SOOSManifestAPI.API_RETRY_COUNT):
             try:
                 SOOS.console_log("*** Putting manifest: " + manifest_name + " :: to: " + api_url)
-
+               #manifest_content is class str, convert to dict 
                 response = requests.put(
                     url=api_url,
-                    data=manifest_content,
-                    headers={'x-soos-apikey': soos.context.api_key}
+                    files=dict(manifest=manifest_content),
+                    headers={'x-soos-apikey': soos.context.api_key,
+                            'Content_type': 'multipart/form-data'
+                    }
                 )
 
                 SOOS.console_log("Manifest Put Executed: " + manifest_name)
@@ -395,10 +395,7 @@ class SOOS:
         self.script = SOOSAnalysisScript()
 
     def load_manifest_types(self):
-        #parser = soos.script.register_arguments()
-        #args = parser.parse_args()
-        #soos.script.load_script_arguments()
-        #soos.context.load(args)
+
         MANIFEST_TEMPLATE = "{soos_base_uri}clients/{soos_client_id}/manifests"
         murl = MANIFEST_TEMPLATE
         murl = murl.replace("{soos_base_uri}", self.context.base_uri)
@@ -436,8 +433,6 @@ class SOOS:
              
             for entries in manifest_file["manifests"]:
                 pattern = entries["pattern"]
-                if pattern == ".*req.*\\.txt": #this is problematic pattern
-                    pattern = "*req*.txt"
                 candidate_files = self.find_manifest_files(pattern = pattern) 
 
                 for cf in candidate_files:
@@ -513,7 +508,7 @@ class SOOS:
                         with open(file_name, 'r') as the_file:
 
                             content = the_file.read()
-
+                            #print("Here is the content", content)
                             if len(content.strip()) > 0:
 
 
@@ -525,17 +520,22 @@ class SOOS:
                                     manifest_name=pure_filename,
                                     manifest_content=content
                                 )
-
-
-                                SOOS.console_log("Add manifest status code: " + str(response.status_code) + " ====> {}".format(response.reason))
-                                print()
-                                print("=====================================")
-                                print()
-                                manifests_found_count += 1
+                                
+                                if "message" in response.json():
+                        
+                                    manifest_message = response.json()["message"]
+                                    manifest_code = response.json()["code"]
+                                    SOOS.console_log(f"MANIFEST API STATUS: {response.status_code} || {manifest_code} =====> {manifest_message}")
+                                    print()
+                                    manifests_found_count += 1 
+                                else:
+                                    SOOS.console_log("There was some error with the Manifest API. For more information, please visit https://soos.io/support")
+                                    print()
+                                    manifests_found_count += 1
 
                             else:
 
-                                SOOS.console_log("WARNING: Manifest file is empty: " + file_name)
+                                SOOS.console_log("WARNING: Manifest file is empty and will be ignored: " + file_name)
 
                     except Exception as e:
                         SOOS.console_log("Could not send manifest: " + file_name + " due to error: " + str(e))
@@ -567,7 +567,9 @@ class SOOS:
 
     @staticmethod
     def console_log(message):
-        print(str(datetime.utcnow()) + " SOOS: " + message)
+        time_now = datetime.utcnow().isoformat(timespec = "seconds", sep = " ")
+        
+        print(time_now + " SOOS: " + message)
 
     def analysis_result_exec(self, report_status_url, analysis_result_max_wait, analysis_result_polling_interval):
 
@@ -582,7 +584,7 @@ class SOOS:
                 sys.exit(1)
 
             response = SOOSAnalysisResultAPI.exec(self.context, report_status_url)
-
+            
             content_object = json.loads(response.content)
 
             if response.status_code < 299:
@@ -626,16 +628,15 @@ class SOOS:
                     )
                     time.sleep(analysis_result_polling_interval)
                     continue
-            elif response.status_code > 500:
-                SOOS.console_log("------------------------")
-                SOOS.console_log("Thanks for your patience while we update our system. For more information visit https://soos.io/status/")
-                SOOS.console_log("------------------------")
-                sys.exit(1)
+
             else:
                 SOOS.console_log("------------------------")
-                SOOS.console_log("ERROR: API Response Status Code: " + str(response.status_code))
-                SOOS.console_log("------------------------")
-                sys.exit(1)
+                if "message" in response.json():
+                    results_error_code = response.json()["code"]
+                    results_error_message = response.json()["message"]
+                    SOOS.console_log("Analysis Results API Status Code:" + str(results_error_code) + results_error_message)
+                    SOOS.console_log("------------------------")
+                    sys.exit(1)
 
 
 class SOOSAnalysisStartAPI:
@@ -669,7 +670,9 @@ class SOOSAnalysisStartAPI:
                 response = requests.put(
                     url=url,
                     data="{}",
-                    headers={'x-soos-apikey': soos_context.api_key, 'content-length': str(0), 'Content-Type': 'application/json'}
+                    headers={'x-soos-apikey': soos_context.api_key, 
+                            'content-length': str(0), 
+                            'Content-Type': 'multipart/form-data'}
                 )
                 
                 break
@@ -1060,42 +1063,27 @@ if __name__ == "__main__":
         
         # Make API call and store response, assuming that status code < 299, ie successful call.
         structure_response = SOOSStructureAPI.exec(soos.context)
-        #
+        
         if structure_response is None:
            
-            SOOS.console_log("A Structure API error occurred: Could not execute API.")
+            SOOS.console_log("A Structure API error occurred: Could not execute API." + more_info)
             if soos.script.on_failure == SOOSOnFailure.FAIL_THE_BUILD:
                 sys.exit(1)
             else:
                 sys.exit(0)
-        
-        elif structure_response.original_response.status_code > 500:
+        # a response is returned but with original_response status code 
+        elif structure_response.original_response.status_code >= 299:
+            if "message" in structure_response.original_response.json():
+                structure_code = structure_response.original_response.json()["code"]
+                structure_message = structure_response.original_response.json()["message"]
+                SOOS.console_log(f"STRUCTURE API STATUS: {structure_code} =====> {structure_message} {more_info}")
+                sys.exit(1)
+            #fallback in case the if clause doesnt work but there really is a > 299 response that deserves message.
+            else: 
+                SOOS.console_log("A Structure API error occurred: Could not execute API." + more_info)
+                sys.exit(1)
             
-            try:
-                SOOS.console_log(structure_response.message + more_info)
-                sys.exit(1)
-            except:
-                SOOS.console_log("Hi! Thanks for your patience while we update our system." + more_info)
-                sys.exit(1)
-        
-        elif structure_response.original_response.status_code == 403:
-            try:
-                SOOS.console_log(structure_response.original_response.status_code + more_info)
-                sys.exit(1)
-            except:
-                SOOS.console_log("The API credentials you provided were not valid." + more_info)
-                sys.exit(1)
-        
-        elif structure_response.original_response.status_code >= 400: 
-            #all other cases, eg other 4xx or 5xx messages
-            try: 
-                SOOS.console_log(structure_response.message + more_info)
-            except:
-                SOOS.console_log("There was a problem with your request" + more_info)
-                if soos.script.on_failure == SOOSOnFailure.FAIL_THE_BUILD:
-                    sys.exit(1)
-                else:
-                    sys.exit(0)
+
 
         # ## STRUCTURE API CALL SUCCESSFUL - CONTINUE
         
@@ -1104,6 +1092,7 @@ if __name__ == "__main__":
         SOOS.console_log("------------------------")
         SOOS.console_log("Analysis Id: " + structure_response.analysis_id)
         SOOS.console_log("Project Id:  " + structure_response.project_id)
+        #Now get ready to send your manifests out for Start Analysis API 
 
         manifests_found_count = soos.send_manifests(
             structure_response.project_id,
@@ -1113,55 +1102,33 @@ if __name__ == "__main__":
         )
 
         if manifests_found_count > 0:
-
+            SOOS.console_log("You have sent a total of {} manifests to be analyzed.".format(manifests_found_count))
             try:
-
-                # api_start_url = soos.context.base_uri + \
-                #                 "clients/" + soos.context.client_id + \
-                #                 "/projects/" + project_id + \
-                #                 "/analysis/" + analysis_id
 
                 SOOS.console_log("------------------------")
                 SOOS.console_log("Starting Analysis")
                 SOOS.console_log("------------------------")
-
+                
                 response = SOOSAnalysisStartAPI.exec(
                     soos_context=soos.context,
                     project_id=structure_response.project_id,
                     analysis_id=structure_response.analysis_id
                 )
 
-                SOOS.console_log("Analysis Start API Response Code: " + str(response.status_code))
+                if response.status_code >= 400:
+                    analysis_code = response.json()["code"]
+                    analysis_message = response.json()["message"]
+                    SOOS.console_log(f"ANALYSIS API STATUS: {analysis_code} =====> {analysis_message} {more_info}")
+                    sys.exit(1)
 
-                if response.status_code > 500:
-                    try:
-                        SOOS.console_log(response.message + more_info) 
-                        sys.exit(1)
-                    except:
-                        SOOS.console_log("Thanks for your patience while we update our system" + more_info)
-                        sys.exit(1)
-                elif response.status_code == 403:
-                    try: 
-                        SOOS.console_log(response.message + more_info)
-                        sys.exit(1)                
-                    except:
-                        SOOS.console_log("The provided API credentials were not valid." + more_info)
-                        sys.exit(1)
-                elif response.status_code >= 400: #for any other 4xx cases 
-                    try: 
-                        SOOS.console_log(response.message + more_info)
-                        sys.exit(1)
-                    except:
-                        SOOS.console_log("Sorry, there was a problem with your request." + more_info)
-                        sys.exit(1)
-                    
-                # NOTE: This is the only route where the initiate request was successful, ie status < 299
+                else:
+                    print()
+                    SOOS.console_log("Analysis request is running, once completed, access the report using the links below")
+                    print()
+                    SOOS.console_log("ReportUrl: " + structure_response.report_url)
+                    print()
 
-                SOOS.console_log(
-                    "Analysis request is running, once completed, access the report using the links below"
-                )
-                SOOS.console_log("ReportUrl: " + structure_response.report_url)
-                SOOS.console_log("EmbedUrl: " + structure_response.embed_url)
+
 
                 if soos.script.mode == SOOSModeOfOperation.RUN_AND_WAIT:
 
@@ -1185,6 +1152,7 @@ if __name__ == "__main__":
          
             except Exception as e:
                 SOOS.console_log(
+
                     "ERROR: " + str(e)
                 )
 
@@ -1192,8 +1160,10 @@ if __name__ == "__main__":
                     sys.exit(1)
                 else:
                     sys.exit(0)
-        else:
-            SOOS.console_log("Could not locate any manifests under " + soos.context.source_code_path)
+        else:   #so the number of manifests is NOT > 0 OR there is an outage
+            
+            SOOS.console_log("Sorry, we could not locate any manifests under " + soos.context.source_code_path + "  Please check your files and try again.")
+            SOOS.console_log("For more help, please visit https://soos.io/support")
             if soos.script.on_failure == SOOSOnFailure.FAIL_THE_BUILD:
                 sys.exit(1)
             else:
@@ -1204,14 +1174,11 @@ if __name__ == "__main__":
         # Sit and wait for ASYNC RESULT
 
         try:
-
             with open(soos.script.async_result_file, 'r') as the_file:
-
                 async_result_content = the_file.read()
                 async_result_values = json.loads(async_result_content)
-
                 soos.console_log("Getting Analysis Result For: " + async_result_values["report_status_url"])
-
+                 
                 soos.analysis_result_exec(
                     async_result_values["report_status_url"],
                     soos.script.analysis_result_max_wait,
