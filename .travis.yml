@@ -8,7 +8,7 @@ script:
   -  # run soos.py with the -h flag for help
 
   -  # ARGS REQUIRING CUSTOMIZATION:
-  - SOOS_PROJECT_NAME="PROJECT_NAME"
+  - SOOS_PROJECT_NAME="mihai_test_travis_ci"
 
   -  # ARGS WHERE CUSTOMIZATION IS OPTIONAL:
   - SOOS_MODE="run_and_wait"
